@@ -147,20 +147,20 @@ class SocketHandler(ApplicationSession):
         return CallResult(users=destinygg.users.get_all_dict())
 
     @inlineCallbacks
-    def on_flair_remove(self, username, esid):
-        if config.debug: print "on_flair_remove: %s %s" % (username, esid)
-        sid = crypto.decrypt(esid)
-        removed = yield destinygg.users.remove(sid)
+    def on_flair_remove(self, username, etoken):
+        if config.debug: print "on_flair_remove: %s %s" % (username, etoken)
+        token = crypto.decrypt(etoken)
+        removed = yield destinygg.users.remove(token)
         if removed:
             self._publish_flair_refresh()
             returnValue(True)
         returnValue(False)
 
     @inlineCallbacks
-    def on_flair_update(self, username, esid):
-        if config.debug: print "on_flair_update: %s %s" % (username, esid)
-        sid = crypto.decrypt(esid)
-        updated = yield destinygg.users.update(sid)
+    def on_flair_update(self, username, etoken):
+        if config.debug: print "on_flair_update: %s %s" % (username, etoken)
+        token = crypto.decrypt(etoken)
+        updated = yield destinygg.users.update(token)
         if updated:
             self._publish_flair_refresh()
             returnValue(True)

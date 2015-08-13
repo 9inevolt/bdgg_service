@@ -16,9 +16,10 @@ def _wrap_user_cb(func):
     return handle_response
 
 @inlineCallbacks
-def _get_user(sid, callback):
-    cookies = {'sid': sid}
-    data = yield getPage('https://www.destiny.gg/profile/info', cookies=cookies)
+def _get_user(token, callback):
+    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+    postdata = 'authtoken=%s' % token
+    data = yield getPage('https://www.destiny.gg/api/auth', method='POST', postdata=postdata, headers=headers)
     ret = _wrap_user_cb(callback)(data)
     returnValue(ret)
 
@@ -49,13 +50,13 @@ def delete(user):
     return False
 
 @inlineCallbacks
-def update(sid):
-    ret = yield _get_user(sid, add)
+def update(token):
+    ret = yield _get_user(token, add)
     returnValue(ret)
 
 @inlineCallbacks
-def remove(sid):
-    ret = yield _get_user(sid, delete)
+def remove(token):
+    ret = yield _get_user(token, delete)
     returnValue(ret)
 
 def get_all_dict():
