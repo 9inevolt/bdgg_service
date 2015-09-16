@@ -1,5 +1,7 @@
 import json
-from tornado.httpclient import AsyncHTTPClient
+from twisted.internet import reactor
+from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.web.client import getPage
 
 import bdgg.config as config
 
@@ -7,19 +9,19 @@ _allusers = {}
 _change_handlers = set()
 
 def _wrap_user_cb(func):
-    def handle_response(response):
-        if response.error:
-            print "Error: ", response.error
-        else:
-            user_json = json.loads(response.body)
-            user = User.from_json(user_json)
-            return func(user)
+    def handle_response(data):
+        user_json = json.loads(data)
+        user = User.from_json(user_json)
+        return func(user)
     return handle_response
 
-def _get_user(sid, callback):
-    headers = {'Cookie': 'sid=%s' % sid}
-    client = AsyncHTTPClient()
-    return client.fetch('https://www.destiny.gg/profile/info', _wrap_user_cb(callback), headers=headers)
+@inlineCallbacks
+def _get_user(token, callback):
+    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+    postdata = 'authtoken=%s' % token
+    data = yield getPage('https://www.destiny.gg/api/auth', method='POST', postdata=postdata, headers=headers)
+    ret = _wrap_user_cb(callback)(data)
+    returnValue(ret)
 
 def _notify_change():
     for cb in _change_handlers:
@@ -28,24 +30,34 @@ def _notify_change():
         except:
             pass
 
+# Returns True if allusers changed, otherwise False
 def add(user):
     current = _allusers.get(user.username, None)
     if user != current:
         _allusers[user.username] = user
         if config.debug: print "add user: %s" % user
         _notify_change()
+        return True
+    return False
 
+# Returns True if allusers changed, otherwise False
 def delete(user):
     current = _allusers.pop(user.username, None)
     if current != None:
         if config.debug: print "del user: %s" % user
         _notify_change()
+        return True
+    return False
 
-def update(sid):
-    _get_user(sid, add)
+@inlineCallbacks
+def update(token):
+    ret = yield _get_user(token, add)
+    returnValue(ret)
 
-def remove(sid):
-    _get_user(sid, delete)
+@inlineCallbacks
+def remove(token):
+    ret = yield _get_user(token, delete)
+    returnValue(ret)
 
 def get_all_dict():
     return {k: _allusers[k].__dict__ for k in _allusers.keys()}
