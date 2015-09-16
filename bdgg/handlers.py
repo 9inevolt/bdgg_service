@@ -100,6 +100,7 @@ class SocketHandler(ApplicationSession):
         print(TimeStr() + self.hoststr + " connection closed.")
         pass
 
+    @inlineCallbacks
     def onstalk(self, QueryType, Name=None, Number=3, Names=None, Session=None):
         if config.debug: print "stalk received: %s %s %s %s" % (QueryType, Name, Number, Names)
 
@@ -110,30 +111,34 @@ class SocketHandler(ApplicationSession):
 
         if QueryType == 's':
             if re.search(r'^[\w\d]+$', Name):
-                lines = self.__destinylog.GetLastLines(Name, Number)
+                llines = yield self.__destinylog.GetLastLines(Name, Number)
+                lines = [l['text'] for l in llines]
+                ltimes = [l['timestamp'] for l in llines]
                 if not lines:
                     raise NameNotFoundError("Name not found: %s. Remember nicks are case-sensitive." % Name)
                 else:
-                    times = self.__destinylog.ParseTimestamps(lines)
-                    return CallResult(Type='s', Data=lines, Times=times)
+                    times = self.__destinylog.ParseTimestamps(ltimes)
+                    data = map(lambda l, t: {"nick":Name, "text":l, "timestamp":t}, lines, times)
+                    returnValue(CallResult(Type='s', Data=data))
         elif QueryType == 'm':
             if Names:
                 num = max(1, Number)
-                tlines = []
-                ttimes = []
+                data = []
                 for name in Names:
                     if re.search(r'^[\w\d]+$', name):
-                        lines = self.__destinylog.GetLastLines(name, num)
+                        llines = yield self.__destinylog.GetLastLines(name, num)
+                        lines = [l['text'] for l in llines]
+                        ltimes = [l['timestamp'] for l in llines]
                         if lines:
-                            tlines += lines
-                            ttimes += self.__destinylog.ParseTimestamps(lines)
+                            times = self.__destinylog.ParseTimestamps(ltimes)
+                            data += map(lambda l, t: {"nick":name, "text":l, "timestamp":t}, lines, times)
                     else:
                         raise MalformedNameError()
 
-                messages = [list(x) for x in zip(*sorted(zip(ttimes, tlines), key=lambda pair: pair[0]))]
+                messages = sorted(data, key=lambda m: m['timestamp'])
+
                 if messages:
-                    ttimes, tlines = messages
-                    return CallResult(Type='s', Data=tlines[-num:], Times=ttimes[-num:])
+                    returnValue(CallResult(Type='s', Data=messages))
                 else:
                     raise NameNotFoundError("Nicks not found. Remember nicks are case-sensitive.")
         else:
@@ -195,20 +200,9 @@ with open(config.userfile, 'a+') as uf:
     except ValueError as e:
         print "Error parsing userfile: %s" % e
 
-def rebuildlogsystem():
-    print("Rebuilding directory index...")
-    _DestinyLog.builddir()
-    _DestinyLog.refreshtoday()
-
 def persist_users():
     with open(config.userfile, 'w') as uf:
         user_dict = {}
         uf.write(json.dumps(destinygg.users.get_all_dict()))
 
-#def on_change():
-#    print "on_change"
-#
-#destinygg.users.add_change_handler(on_change)
-
-task.LoopingCall(rebuildlogsystem).start(config.rebuildinterval)
 task.LoopingCall(persist_users).start(config.persistusersinterval)
